@@ -144,6 +144,123 @@ const char* _cublasGetErrorEnum(cublasStatus_t error) {
   } while (0)
 
 template <>
+void bgemm<double>(CUDABLAS_BGEMM_ARGTYPES(double)) {
+  cublasHandle_t handle = at::cuda::getCurrentCUDABlasHandle();
+  cublasOperation_t opa = _cublasOpFromChar(transa);
+  cublasOperation_t opb = _cublasOpFromChar(transb);
+  _cublasAdjustLdLevel3(transa, transb, m, n, k, &lda, &ldb, &ldc);
+  GEMM_CHECK_ARGVALUES(double);
+  const int64_t stridea = (transa == 'N' || transa == 'n') ? lda*k : lda*n;
+  const int64_t strideb = (transb == 'N' || transb == 'n') ? ldb*n : ldb*k;
+  const int64_t stridec = ldc*n;
+  TORCH_CUDABLAS_CHECK(cublasDgemmStridedBatched(
+      handle, opa, opb, m, n, k, &alpha, a, lda, stridea, b, ldb, strideb, &beta, c, ldc, stridec, num_batches));
+}
+
+template <>
+void bgemm<float>(CUDABLAS_BGEMM_ARGTYPES(float)) {
+  cublasHandle_t handle = at::cuda::getCurrentCUDABlasHandle();
+  cublasOperation_t opa = _cublasOpFromChar(transa);
+  cublasOperation_t opb = _cublasOpFromChar(transb);
+  _cublasAdjustLdLevel3(transa, transb, m, n, k, &lda, &ldb, &ldc);
+  GEMM_CHECK_ARGVALUES(float);
+  const int64_t stridea = (transa == 'N' || transa == 'n') ? lda*k : lda*n;
+  const int64_t strideb = (transb == 'N' || transb == 'n') ? ldb*n : ldb*k;
+  const int64_t stridec = ldc*n;
+  TORCH_CUDABLAS_CHECK(cublasSgemmStridedBatched(
+      handle, opa, opb, m, n, k, &alpha, a, lda, stridea, b, ldb, strideb, &beta, c, ldc, stridec, num_batches));
+}
+
+#ifndef __HIP_PLATFORM_HCC__
+  template <>
+  void bgemm<c10::complex<double>>(CUDABLAS_BGEMM_ARGTYPES(c10::complex<double>)) {
+    cublasHandle_t handle = at::cuda::getCurrentCUDABlasHandle();
+    cublasOperation_t opa = _cublasOpFromChar(transa);
+    cublasOperation_t opb = _cublasOpFromChar(transb);
+    _cublasAdjustLdLevel3(transa, transb, m, n, k, &lda, &ldb, &ldc);
+    GEMM_CHECK_ARGVALUES(c10::complex<double>);
+    const int64_t stridea = (transa == 'N' || transa == 'n') ? lda*k : lda*n;
+    const int64_t strideb = (transb == 'N' || transb == 'n') ? ldb*n : ldb*k;
+    const int64_t stridec = ldc*n;
+    TORCH_CUDABLAS_CHECK(cublasZgemmStridedBatched(
+        handle, opa, opb, m, n, k, reinterpret_cast<const cuDoubleComplex*>(&alpha), reinterpret_cast<const cuDoubleComplex*>(a),
+        lda, stridea, reinterpret_cast<const cuDoubleComplex*>(b), ldb, strideb, reinterpret_cast<const cuDoubleComplex*>(&beta),
+        reinterpret_cast<cuDoubleComplex*>(c), ldc, stridec, num_batches));
+  }
+#endif
+
+#ifndef __HIP_PLATFORM_HCC__
+  template <>
+  void bgemm<c10::complex<float>>(CUDABLAS_BGEMM_ARGTYPES(c10::complex<float>)) {
+    cublasHandle_t handle = at::cuda::getCurrentCUDABlasHandle();
+    cublasOperation_t opa = _cublasOpFromChar(transa);
+    cublasOperation_t opb = _cublasOpFromChar(transb);
+    _cublasAdjustLdLevel3(transa, transb, m, n, k, &lda, &ldb, &ldc);
+    GEMM_CHECK_ARGVALUES(c10::complex<float>);
+    const int64_t stridea = (transa == 'N' || transa == 'n') ? lda*k : lda*n;
+    const int64_t strideb = (transb == 'N' || transb == 'n') ? ldb*n : ldb*k;
+    const int64_t stridec = ldc*n;
+    TORCH_CUDABLAS_CHECK(cublasCgemm3mStridedBatched(
+        handle, opa, opb, m, n, k, reinterpret_cast<const cuComplex*>(&alpha), reinterpret_cast<const cuComplex*>(a),
+        lda, stridea, reinterpret_cast<const cuComplex*>(b), ldb, strideb, reinterpret_cast<const cuComplex*>(&beta),
+        reinterpret_cast<cuComplex*>(c), ldc, stridec, num_batches));
+  }
+#endif
+
+// #ifdef __HIP_PLATFORM_HCC__
+// template <>
+// void bgemm<at::BFloat16>(CUDABLAS_BGEMM_ARGTYPES(at::BFloat16)) {
+//   cublasHandle_t handle = at::cuda::getCurrentCUDABlasHandle();
+//   cublasOperation_t opa = _cublasOpFromChar(transa);
+//   cublasOperation_t opb = _cublasOpFromChar(transb);
+//   float falpha = alpha;
+//   float fbeta = beta;
+//   _cublasAdjustLdLevel3(transa, transb, m, n, k, &lda, &ldb, &ldc);
+//   GEMM_CHECK_ARGVALUES(at::BFloat16);
+//   TORCH_CUDABLAS_CHECK(rocblas_gemm_ex(
+//       handle,
+//       opa,
+//       opb,
+//       m,
+//       n,
+//       k,
+//       &falpha,
+//       a,
+//       rocblas_datatype_bf16_r,
+//       lda,
+//       b,
+//       rocblas_datatype_bf16_r,
+//       ldb,
+//       &fbeta,
+//       c,
+//       rocblas_datatype_bf16_r,
+//       ldc,
+//       c,
+//       rocblas_datatype_bf16_r,
+//       ldc,
+//       rocblas_datatype_f32_r,
+//       rocblas_gemm_algo_standard,
+//       0,
+//       0));
+// }
+// #endif
+
+template <>
+void bgemm<at::Half>(CUDABLAS_BGEMM_ARGTYPES(at::Half)) {
+  cublasHandle_t handle = at::cuda::getCurrentCUDABlasHandle();
+  cublasOperation_t opa = _cublasOpFromChar(transa);
+  cublasOperation_t opb = _cublasOpFromChar(transb);
+  _cublasAdjustLdLevel3(transa, transb, m, n, k, &lda, &ldb, &ldc);
+  GEMM_CHECK_ARGVALUES(at::Half);
+  const int64_t stridea = (transa == 'N' || transa == 'n') ? lda*k : lda*n;
+  const int64_t strideb = (transb == 'N' || transb == 'n') ? ldb*n : ldb*k;
+  const int64_t stridec = ldc*n;
+  TORCH_CUDABLAS_CHECK(cublasHgemmStridedBatched(
+      handle, opa, opb, m, n, k, reinterpret_cast<const __half *>(&alpha), reinterpret_cast<const __half *>(a), lda, stridea,
+      reinterpret_cast<const __half *>(b), ldb, strideb, reinterpret_cast<const __half *>(&beta), reinterpret_cast<__half *>(c), ldc, stridec, num_batches));
+}
+
+template <>
 void gemm<double>(CUDABLAS_GEMM_ARGTYPES(double)) {
   cublasHandle_t handle = at::cuda::getCurrentCUDABlasHandle();
   cublasOperation_t opa = _cublasOpFromChar(transa);
